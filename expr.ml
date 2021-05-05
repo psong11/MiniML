@@ -66,21 +66,21 @@ let vars_of_list : string list -> varidset =
 
 let free_vars (exp : expr) : varidset =
   let rec find_free_vars (expression : expr) : SS.t =
-  match expression with
-  | Var x -> SS.singleton x
-  | Num _ -> SS.empty
-  | Bool _ -> SS.empty
-  | Unop (_, expr) -> find_free_vars expr
-  | Binop (_, expr1, expr2) ->
-     SS.union (find_free_vars expr1) (find_free_vars expr2)
-  | Conditional (condition, expr1, expr2) -> SS.union (find_free_vars condition) (SS.union (find_free_vars expr1) (find_free_vars expr2))
-  | Fun (varid, expr) -> SS.remove varid (find_free_vars expr)
-  | Let (varid, expr1, expr2) -> 
-     SS.union (find_free_vars expr1) (SS.remove varid (find_free_vars expr2))
-  | Letrec (varid, expr1, expr2) -> 
-     SS.remove varid (SS.union (find_free_vars expr1) (find_free_vars expr2))
-  | App (expr1, expr2) -> SS.union (find_free_vars expr1) (find_free_vars expr2) 
-  | Raise | Unassigned -> SS.empty in            
+    match expression with
+    | Var x -> SS.singleton x
+    | Num _ -> SS.empty
+    | Bool _ -> SS.empty
+    | Unop (_, expr) -> find_free_vars expr
+    | Binop (_, expr1, expr2) ->
+      SS.union (find_free_vars expr1) (find_free_vars expr2)
+    | Conditional (condition, expr1, expr2) -> SS.union (find_free_vars condition) (SS.union (find_free_vars expr1) (find_free_vars expr2))
+    | Fun (varid, expr) -> SS.remove varid (find_free_vars expr)
+    | Let (varid, expr1, expr2) -> 
+      SS.union (find_free_vars expr1) (SS.remove varid (find_free_vars expr2))
+    | Letrec (varid, expr1, expr2) -> 
+      SS.remove varid (SS.union (find_free_vars expr1) (find_free_vars expr2))
+    | App (expr1, expr2) -> SS.union (find_free_vars expr1) (find_free_vars expr2) 
+    | Raise | Unassigned -> SS.empty in            
   find_free_vars exp
    ;;
 
@@ -91,9 +91,9 @@ let free_vars (exp : expr) : varidset =
    generated variable name.) *)
 let new_varname : unit -> varid =
   let suffix = ref 0 in
-  fun () -> let symbol = "var" ^ string_of_int !suffix in
-             suffix := !suffix + 1;
-             symbol ;;
+    fun () -> let symbol = "var" ^ string_of_int !suffix in
+              suffix := !suffix + 1;
+              symbol ;;
 
 (*......................................................................
   Substitution 
@@ -116,21 +116,25 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
     | Binop (op, expr1, expr2) -> Binop(op, sub_this expr1, sub_this expr2)
     | Conditional (condition, expr1, expr2) -> 
        Conditional (sub_this condition, sub_this expr1, sub_this expr2)
-    | Fun (varid, expr) -> 
-       if varid = var_name then Fun (varid, expr)
-       else if SS.mem varid (free_vars repl) 
-         then let z = new_varname () in Fun (z, sub_this((subst varid (Var(z)) expr)))
-         else Fun (varid, sub_this expr)
-    | Let (varid, def, body) ->
-      if varid = var_name then Let(varid, sub_this def, body)
-      else if SS.mem varid (free_vars repl)
-        then let z = new_varname () in Let (z, sub_this def, sub_this(subst varid (Var(z)) body))
-        else Let(varid, sub_this def, sub_this body) 
-    | Letrec (varid, def, body) ->
-      if varid = var_name then expression
-      else if SS.mem varid (free_vars repl)
-        then let z = new_varname () in Letrec (z, sub_this def, sub_this(subst varid (Var(z)) body))
-        else Letrec(varid, sub_this def, sub_this body) 
+    | Fun (x, expr) -> 
+      if x = var_name then Fun (x, expr)
+      else 
+        if SS.mem x (free_vars repl) 
+        then let z = new_varname () in 
+            Fun (z, sub_this((subst x (Var(z)) expr)))
+        else Fun (x, sub_this expr)
+    | Let (x, def, body) ->
+      if x = var_name then Let(x, sub_this def, body)
+      else 
+        if SS.mem x (free_vars repl)
+        then let z = new_varname () in Let (z, sub_this def, sub_this(subst x (Var(z)) body))
+        else Let(x, sub_this def, sub_this body) 
+    | Letrec (x, def, body) ->
+      if x = var_name then expression
+      else 
+        if SS.mem x (free_vars repl)
+        then let z = new_varname () in Letrec (z, sub_this def, sub_this(subst x (Var(z)) body))
+        else Letrec(x, sub_this def, sub_this body) 
     | App (funexpr, expr) -> App(sub_this funexpr, sub_this expr)
     | _ -> exp in
   sub_this exp ;;
@@ -143,7 +147,7 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
    the concrete syntax of the expression `exp` *)
 let rec exp_to_concrete_string (exp : expr) : string =
   match exp with
-  | Var varid -> varid
+  | Var x -> x
   | Num i -> string_of_int i
   | Bool b -> string_of_bool b
   | Unop (unop, expr) -> 
@@ -163,9 +167,9 @@ let rec exp_to_concrete_string (exp : expr) : string =
   | Conditional (condition, expr1, expr2) -> "if " ^ exp_to_concrete_string condition ^ 
                                              " then " ^ exp_to_concrete_string expr1 ^ 
                                              " else " ^ exp_to_concrete_string expr2
-  | Fun (varid, expr) -> "fun " ^ varid ^ " -> " ^ exp_to_concrete_string expr
-  | Let (varid, expr1, expr2) -> "let " ^ varid ^ " = " ^ exp_to_concrete_string expr1 ^ " in " ^ exp_to_concrete_string expr2
-  | Letrec (varid, expr1, expr2) -> "let rec " ^ varid ^ " = " ^ exp_to_concrete_string expr1 ^ " in " ^ exp_to_concrete_string expr2
+  | Fun (x, expr) -> "fun " ^ x ^ " -> " ^ exp_to_concrete_string expr
+  | Let (x, def, body) -> "let " ^ x ^ " = " ^ exp_to_concrete_string def ^ " in " ^ exp_to_concrete_string body
+  | Letrec (x, def, body) -> "let rec " ^ x ^ " = " ^ exp_to_concrete_string def ^ " in " ^ exp_to_concrete_string body
   | Raise -> "raise "
   | Unassigned -> "unassigned"
   | App (funexpr, expr) -> exp_to_concrete_string funexpr ^ " " ^ exp_to_concrete_string expr ;;
@@ -174,7 +178,7 @@ let rec exp_to_concrete_string (exp : expr) : string =
    abstract syntax of the expression `exp` *)
 let rec exp_to_abstract_string (exp : expr) : string =
   match exp with
-  | Var varid -> "Var(" ^ varid ^ ")"
+  | Var x -> "Var(" ^ x ^ ")"
   | Num i -> "Num(" ^ string_of_int i ^ ")"
   | Bool b -> "Bool(" ^ string_of_bool b ^ ")"
   | Unop (unop, expr) -> 
@@ -194,9 +198,9 @@ let rec exp_to_abstract_string (exp : expr) : string =
   | Conditional (condition, expr1, expr2) -> "Conditional(" ^ exp_to_abstract_string condition ^ 
                                              ", " ^ exp_to_abstract_string expr1 ^ 
                                              ", " ^ exp_to_abstract_string expr2 ^ ")"
-  | Fun (varid, expr) -> "Fun(" ^ varid ^ ", " ^ exp_to_abstract_string expr ^ ")"
-  | Let (varid, expr1, expr2) -> "Let(" ^ varid ^ ", " ^ exp_to_abstract_string expr1 ^ ", " ^ exp_to_abstract_string expr2 ^ ")"
-  | Letrec (varid, expr1, expr2) -> "Letrec(" ^ varid ^ ", " ^ exp_to_abstract_string expr1 ^ ", " ^ exp_to_abstract_string expr2 ^ ")"
+  | Fun (x, expr) -> "Fun(" ^ x ^ ", " ^ exp_to_abstract_string expr ^ ")"
+  | Let (x, def, body) -> "Let(" ^ x ^ ", " ^ exp_to_abstract_string def ^ ", " ^ exp_to_abstract_string body ^ ")"
+  | Letrec (x, def, body) -> "Letrec(" ^ x ^ ", " ^ exp_to_abstract_string def ^ ", " ^ exp_to_abstract_string body ^ ")"
   | Raise -> "Raise"
   | Unassigned -> "Unassigned"
   | App (funexpr, expr) -> "App(" ^ exp_to_abstract_string funexpr ^ ", " ^ exp_to_abstract_string expr ^ ")"
