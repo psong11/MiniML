@@ -253,7 +253,7 @@ let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.val
           let vQ = eval_env expr env semantic_type in
           eval_env lexpr (Env.extend lexicalenvironment x (ref vQ)) semantic_type
         | _ -> raise (EvalError "didn't input a function")) 
-      else raise (EvalError "inputted semantic type is not yet implemented")
+      else raise (EvalError "inputted semantic type is not yet implemented") ;;
    
 let eval_d (exp : expr) (env : Env.env) : Env.value =
   eval_env exp env "dynamic" ;;
@@ -280,4 +280,4 @@ let eval_e _ =
    above, not the `evaluate` function, so it doesn't matter how it's
    set when you submit your solution.) *)
    
-let evaluate = eval_s ;;
+let evaluate = eval_l ;;
