@@ -211,10 +211,6 @@ unit_test (eval_l (Letrec("f", Fun("x", Conditional(Binop(Equals, Var("x"), Num(
         Num(2)))) (Env.empty())
         = Env.Val(Num(0)))
         "eval_l recursive case";
-
-
-
-
 ;;
 
 let _ = tests ();;
