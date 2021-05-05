@@ -7,9 +7,6 @@
   Abstract syntax of MiniML expressions 
  *)
 
-open CS51Utils ;;
-open Absbook ;;
-
 type unop =
   | Negate
 ;;
