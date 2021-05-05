@@ -96,11 +96,11 @@ module Env : ENV =
       "{" ^ env_to_string_helper env ^ "}"
     and
     value_to_string ?(printenvp : bool = true) (v : value) : string =
-    match v with
-    | Val exp -> exp_to_concrete_string exp
-    | Closure (exp, env) -> 
-      if printenvp then (exp_to_concrete_string exp) ^ "where" ^ env_to_string env
-      else exp_to_concrete_string exp;;
+      match v with
+      | Val exp -> exp_to_concrete_string exp
+      | Closure (exp, env) -> 
+        if printenvp then (exp_to_concrete_string exp) ^ "where" ^ env_to_string env
+        else exp_to_concrete_string exp ;;
   end
 ;;
 
@@ -139,7 +139,7 @@ exception IllFormed of string ;;
 
 let eval_s (exp : expr) (_env : Env.env) : Env.value =
 
-  let binopeval (op : binop) (v1 : expr) (v2 : expr) : expr =
+  let binopeval_s (op : binop) (v1 : expr) (v2 : expr) : expr =
     match op, v1, v2 with
     | Plus, Num x1, Num x2 -> Num (x1 + x2)
     | Plus, _, _ -> raise (EvalError "can't add non-integers")
@@ -154,7 +154,7 @@ let eval_s (exp : expr) (_env : Env.env) : Env.value =
     | LessThan, Bool x1, Bool x2 -> Bool (x1 < x2)
     | LessThan, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") in
 
-  let unopeval (op : unop) (e : expr) : expr = 
+  let unopeval_s (op : unop) (e : expr) : expr = 
     match op, e with 
     | Negate, Num x -> Num (~- x)
     | Negate, _ -> raise (EvalError "can't negate non-integers") in
@@ -164,8 +164,8 @@ let eval_s (exp : expr) (_env : Env.env) : Env.value =
     | Var x -> raise (UnboundVariable x)
     | Num _ -> exp
     | Bool _ -> exp
-    | Unop (op, exp1) -> unopeval op (evaluate exp1)
-    | Binop (op, exp1, exp2) -> binopeval op (evaluate exp1) (evaluate exp2)
+    | Unop (op, exp1) -> unopeval_s op (evaluate exp1)
+    | Binop (op, exp1, exp2) -> binopeval_s op (evaluate exp1) (evaluate exp2)
     | Conditional (condition, expr1, expr2) -> 
       (match evaluate condition with
       | Bool true -> evaluate expr1
@@ -188,7 +188,7 @@ let eval_s (exp : expr) (_env : Env.env) : Env.value =
 (* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator -- to be
    completed *)
 
-let binopeval (op : binop) (v1 : Env.value) (v2 : Env.value) : Env.value =
+let binopeval_env (op : binop) (v1 : Env.value) (v2 : Env.value) : Env.value =
     match op, v1, v2 with
     | Plus, Val(Num x1), Val(Num x2) -> Val(Num (x1 + x2))
     | Plus, _, _ -> raise (EvalError "can't add non-integers")
@@ -203,7 +203,7 @@ let binopeval (op : binop) (v1 : Env.value) (v2 : Env.value) : Env.value =
     | LessThan, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 < x2))
     | LessThan, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") ;;
 
-let unopeval (op : unop) (e : Env.value) : Env.value = 
+let unopeval_env (op : unop) (e : Env.value) : Env.value = 
   match op, e with 
   | Negate, Val(Num x) -> Val(Num (~- x))
   | Negate, _ -> raise (EvalError "can't negate non-integers") ;;
@@ -214,9 +214,9 @@ let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.val
   | Num i -> Val(Num i)
   | Bool b -> Val(Bool b)
   | Unop (op, expr) -> 
-    unopeval op (eval_env expr env semantic_type)
+    unopeval_env op (eval_env expr env semantic_type)
   | Binop (op, expr1, expr2) -> 
-    binopeval op (eval_env expr1 env semantic_type) (eval_env expr2 env semantic_type)
+    binopeval_env op (eval_env expr1 env semantic_type) (eval_env expr2 env semantic_type)
   | Conditional (condition, expr1, expr2) ->
     (match eval_env condition env semantic_type with
     | Val(Bool true) -> eval_env expr1 env semantic_type
@@ -255,13 +255,13 @@ let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.val
         | _ -> raise (EvalError "didn't input a function")) 
       else raise (EvalError "inputted semantic type is not yet implemented")
    
-let rec eval_d (exp : expr) (env : Env.env) : Env.value =
+let eval_d (exp : expr) (env : Env.env) : Env.value =
   eval_env exp env "dynamic" ;;
        
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator -- optionally
    completed as (part of) your extension *)
    
-let rec eval_l (exp : expr) (env : Env.env) : Env.value =
+let eval_l (exp : expr) (env : Env.env) : Env.value =
   eval_env exp env "lexical" ;;
 
 (* The EXTENDED evaluator -- if you want, you can provide your
