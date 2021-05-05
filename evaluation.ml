@@ -69,22 +69,40 @@ module Env : ENV =
     let empty () : env = [] ;;
 
     let close (exp : expr) (env : env) : value =
-      failwith "close not implemented" ;;
+      Closure(exp, env)
 
     let lookup (env : env) (varname : varid) : value =
-      failwith "lookup not implemented" ;;
+      match (List.assoc_opt varname env) with
+      | Some value_ref -> !value_ref
+      | None -> raise (EvalError "variable not found")
 
     let extend (env : env) (varname : varid) (loc : value ref) : env =
-      failwith "extend not implemented" ;;
+      let rec extend_helper (environment : env) =
+        match environment with
+        | [] -> [(varname, loc)]
+        | (var, value_ref) :: tl ->
+          if var = varname then (var, loc) :: tl
+          else (var, value_ref) :: extend_helper tl in
+      extend_helper env ;;
 
-    let value_to_string ?(printenvp : bool = true) (v : value) : string =
-      failwith "value_to_string not implemented" ;;
-
-    let env_to_string (env : env) : string =
-      failwith "env_to_string not implemented" ;;
+    let rec env_to_string (env : env) : string =
+      let rec env_to_string_helper (environment : env) =
+        match environment with
+        | [] -> ""
+        | (var, value_ref) :: tl ->
+          if tl = [] then var ^ ": " ^ (value_to_string !value_ref)
+          else var ^ ": " ^ (value_to_string !value_ref) ^
+          ", " ^ env_to_string_helper tl in
+      "{" ^ env_to_string_helper env ^ "}"
+    and
+    value_to_string ?(printenvp : bool = true) (v : value) : string =
+    match v with
+    | Val exp -> exp_to_concrete_string exp
+    | Closure (exp, env) -> 
+      if printenvp then (exp_to_concrete_string exp) ^ "where" ^ env_to_string env
+      else exp_to_concrete_string exp;;
   end
 ;;
-
 
 (*......................................................................
   Evaluation functions
@@ -120,7 +138,7 @@ exception UnboundVariable of string ;;
 exception IllFormed of string ;;
 
 let eval_s (exp : expr) (_env : Env.env) : Env.value =
-  
+
   let binopeval (op : binop) (v1 : expr) (v2 : expr) : expr =
     match op, v1, v2 with
     | Plus, Num x1, Num x2 -> Num (x1 + x2)
@@ -143,32 +161,108 @@ let eval_s (exp : expr) (_env : Env.env) : Env.value =
      
   let rec evaluate (exp : expr) : expr =
     match exp with
-    | Var x -> exp
+    | Var x -> raise (UnboundVariable x)
     | Num _ -> exp
     | Bool _ -> exp
     | Unop (op, exp1) -> unopeval op (evaluate exp1)
     | Binop (op, exp1, exp2) -> binopeval op (evaluate exp1) (evaluate exp2)
-    | Conditional (condition, expr1, expr2) -> if (condition = Bool(true)) then evaluate expr1 else evaluate expr2
+    | Conditional (condition, expr1, expr2) -> 
+      (match evaluate condition with
+      | Bool true -> evaluate expr1
+      | Bool false -> evaluate expr2
+      | _ -> raise (EvalError "condition must evaluate to bool"))
     | Fun (x, expr) -> Fun (x, expr)
     | Let (x, def, body) -> evaluate (subst x (evaluate def) body) 
-    | Letrec (x, def, body) -> evaluate (subst x (subst x (Letrec (x, (evaluate def), Var(x))) (evaluate def)) body)
-    | App (Fun (x, body), expr) -> evaluate (subst x (evaluate expr) body)
-    | _ -> raise (EvalError "syntax error")
+    | Letrec (x, def, body) -> 
+        let vD = evaluate def in 
+        evaluate (subst x (subst x (Letrec (x, vD, Var(x))) vD) body)
+    | App (expr1, expr2) -> 
+      let f = evaluate expr1 in
+      (match f with
+      | Fun (x, expr) -> evaluate (subst x (evaluate expr2) expr)
+      | _ -> raise (EvalError "didnt input a function"))
+    | Raise | Unassigned -> raise (EvalError "syntax error")
     in
   Env.Val (evaluate exp) ;;
 
-
 (* The DYNAMICALLY-SCOPED ENVIRONMENT MODEL evaluator -- to be
    completed *)
+
+let binopeval (op : binop) (v1 : Env.value) (v2 : Env.value) : Env.value =
+    match op, v1, v2 with
+    | Plus, Val(Num x1), Val(Num x2) -> Val(Num (x1 + x2))
+    | Plus, _, _ -> raise (EvalError "can't add non-integers")
+    | Minus, Val(Num x1), Val(Num x2) -> Val(Num (x1 - x2))
+    | Minus, _, _ -> raise (EvalError "can't subtract non-integers")
+    | Times, Val(Num x1), Val(Num x2) -> Val(Num (x1 * x2))
+    | Times, _, _ -> raise (EvalError "can't multiply non-integers")
+    | Equals, Val(Num x1), Val(Num x2) -> Val(Bool (x1 = x2))
+    | Equals, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 = x2))
+    | Equals, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") 
+    | LessThan, Val(Num x1), Val(Num x2) -> Val(Bool (x1 < x2))
+    | LessThan, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 < x2))
+    | LessThan, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") ;;
+
+let unopeval (op : unop) (e : Env.value) : Env.value = 
+  match op, e with 
+  | Negate, Val(Num x) -> Val(Num (~- x))
+  | Negate, _ -> raise (EvalError "can't negate non-integers") ;;
+
+let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.value =
+  match exp with
+  | Var x -> Env.lookup env x
+  | Num i -> Val(Num i)
+  | Bool b -> Val(Bool b)
+  | Unop (op, expr) -> 
+    unopeval op (eval_env expr env semantic_type)
+  | Binop (op, expr1, expr2) -> 
+    binopeval op (eval_env expr1 env semantic_type) (eval_env expr2 env semantic_type)
+  | Conditional (condition, expr1, expr2) ->
+    (match eval_env condition env semantic_type with
+    | Val(Bool true) -> eval_env expr1 env semantic_type
+    | Val(Bool false) -> eval_env expr2 env semantic_type
+    | _ -> raise (EvalError "condition must evaluate to a bool"))
+  | Let (x, def, body) -> 
+    eval_env body (Env.extend env x (ref (eval_env def env semantic_type))) semantic_type
+  | Letrec (x, def, body) ->
+    let ref_unassigned = ref (Env.Val (Unassigned)) in
+    let modified_environment = Env.extend env x (ref_unassigned) in 
+    let evaluated_def = eval_env def modified_environment semantic_type in
+    ref_unassigned := evaluated_def;
+    eval_env body modified_environment semantic_type
+  | Raise -> raise EvalException
+  | Unassigned -> raise (EvalError "unassigned")
+  | Fun (x, expr) -> 
+    if String.equal semantic_type "dynamic"
+    then Val(Fun(x, expr)) 
+    else 
+      if String.equal semantic_type "lexical" 
+      then Env.close exp env 
+      else raise (EvalError "inputted semantic type is not yet implemented")
+  | App (funexpr, expr) -> 
+    if String.equal semantic_type "dynamic"
+    then (match eval_env funexpr env semantic_type with
+        | Env.Val (Fun (varid, fundef)) -> 
+          let vQ = eval_env expr env semantic_type in
+          eval_env fundef (Env.extend env varid (ref vQ)) semantic_type
+        | _ -> raise (EvalError "didn't input a function"))
+    else 
+      if String.equal semantic_type "lexical" 
+      then (match eval_env funexpr env semantic_type with
+        | Env.Closure (Fun (x, lexpr), lexicalenvironment) -> 
+          let vQ = eval_env expr env semantic_type in
+          eval_env lexpr (Env.extend lexicalenvironment x (ref vQ)) semantic_type
+        | _ -> raise (EvalError "didn't input a function")) 
+      else raise (EvalError "inputted semantic type is not yet implemented")
    
-let eval_d (_exp : expr) (_env : Env.env) : Env.value =
-  failwith "eval_d not implemented" ;;
+let rec eval_d (exp : expr) (env : Env.env) : Env.value =
+  eval_env exp env "dynamic" ;;
        
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator -- optionally
    completed as (part of) your extension *)
    
-let eval_l (_exp : expr) (_env : Env.env) : Env.value =
-  failwith "eval_l not implemented" ;;
+let rec eval_l (exp : expr) (env : Env.env) : Env.value =
+  eval_env exp env "lexical" ;;
 
 (* The EXTENDED evaluator -- if you want, you can provide your
    extension as a separate evaluator, or if it is type- and

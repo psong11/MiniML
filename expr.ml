@@ -7,6 +7,9 @@
   Abstract syntax of MiniML expressions 
  *)
 
+open CS51Utils ;;
+open Absbook ;;
+
 type unop =
   | Negate
 ;;
@@ -75,11 +78,12 @@ let free_vars (exp : expr) : varidset =
   | Let (varid, expr1, expr2) -> 
      SS.union (find_free_vars expr1) (SS.remove varid (find_free_vars expr2))
   | Letrec (varid, expr1, expr2) -> 
-     SS.union (find_free_vars expr1) (SS.remove varid (find_free_vars expr2))
+     SS.remove varid (SS.union (find_free_vars expr1) (find_free_vars expr2))
   | App (expr1, expr2) -> SS.union (find_free_vars expr1) (find_free_vars expr2) 
-  | _ -> SS.empty in            
+  | Raise | Unassigned -> SS.empty in            
   find_free_vars exp
    ;;
+
   
 (* new_varname () -- Returns a freshly minted `varid` constructed with
    a running counter a la `gensym`. Assumes no variable names use the
@@ -118,15 +122,15 @@ let rec subst (var_name : varid) (repl : expr) (exp : expr) : expr =
          then let z = new_varname () in Fun (z, sub_this((subst varid (Var(z)) expr)))
          else Fun (varid, sub_this expr)
     | Let (varid, def, body) ->
-       if varid = var_name then Let(varid, sub_this def, body)
-       else if SS.mem varid (free_vars repl)
-         then let z = new_varname () in Let (z, sub_this def, sub_this(subst varid (Var(z)) body))
-         else Let(varid, sub_this def, sub_this body) 
-    | Letrec (varid, def, body) ->
       if varid = var_name then Let(varid, sub_this def, body)
-       else if SS.mem varid (free_vars repl)
-         then let z = new_varname () in Let (z, sub_this def, sub_this(subst varid (Var(z)) body))
-         else Let(varid, sub_this def, sub_this body) 
+      else if SS.mem varid (free_vars repl)
+        then let z = new_varname () in Let (z, sub_this def, sub_this(subst varid (Var(z)) body))
+        else Let(varid, sub_this def, sub_this body) 
+    | Letrec (varid, def, body) ->
+      if varid = var_name then expression
+      else if SS.mem varid (free_vars repl)
+        then let z = new_varname () in Letrec (z, sub_this def, sub_this(subst varid (Var(z)) body))
+        else Letrec(varid, sub_this def, sub_this body) 
     | App (funexpr, expr) -> App(sub_this funexpr, sub_this expr)
     | _ -> exp in
   sub_this exp ;;
@@ -145,7 +149,7 @@ let rec exp_to_concrete_string (exp : expr) : string =
   | Unop (unop, expr) -> 
     let helperunop : string =
       match unop with
-      | Negate -> " - " in
+      | Negate -> " ~- " in
       helperunop ^ exp_to_concrete_string expr
   | Binop (binop, expr1, expr2) -> 
       let helperbinopp : string = 
@@ -156,14 +160,14 @@ let rec exp_to_concrete_string (exp : expr) : string =
         | Equals   -> " = "
         | LessThan -> " < " in
       exp_to_concrete_string expr1 ^ helperbinopp ^ exp_to_concrete_string expr2
-  | Conditional (condition, expr1, expr2) -> " if " ^ exp_to_concrete_string condition ^ 
+  | Conditional (condition, expr1, expr2) -> "if " ^ exp_to_concrete_string condition ^ 
                                              " then " ^ exp_to_concrete_string expr1 ^ 
                                              " else " ^ exp_to_concrete_string expr2
   | Fun (varid, expr) -> "fun " ^ varid ^ " -> " ^ exp_to_concrete_string expr
   | Let (varid, expr1, expr2) -> "let " ^ varid ^ " = " ^ exp_to_concrete_string expr1 ^ " in " ^ exp_to_concrete_string expr2
   | Letrec (varid, expr1, expr2) -> "let rec " ^ varid ^ " = " ^ exp_to_concrete_string expr1 ^ " in " ^ exp_to_concrete_string expr2
-  | Raise -> " raise "
-  | Unassigned -> " unassigned "
+  | Raise -> "raise "
+  | Unassigned -> "unassigned"
   | App (funexpr, expr) -> exp_to_concrete_string funexpr ^ " " ^ exp_to_concrete_string expr ;;
      
 (* exp_to_abstract_string exp -- Return a string representation of the
