@@ -188,26 +188,30 @@ let eval_s (exp : expr) (_env : Env.env) : Env.value =
    completed *)
 
 let binopeval_env (op : binop) (v1 : Env.value) (v2 : Env.value) : Env.value =
-    match op, v1, v2 with
-    | Plus, Val(Num x1), Val(Num x2) -> Val(Num (x1 + x2))
-    | Plus, _, _ -> raise (EvalError "can't add non-integers")
-    | Minus, Val(Num x1), Val(Num x2) -> Val(Num (x1 - x2))
-    | Minus, _, _ -> raise (EvalError "can't subtract non-integers")
-    | Times, Val(Num x1), Val(Num x2) -> Val(Num (x1 * x2))
-    | Times, _, _ -> raise (EvalError "can't multiply non-integers")
-    | Equals, Val(Num x1), Val(Num x2) -> Val(Bool (x1 = x2))
-    | Equals, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 = x2))
-    | Equals, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") 
-    | LessThan, Val(Num x1), Val(Num x2) -> Val(Bool (x1 < x2))
-    | LessThan, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 < x2))
-    | LessThan, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") ;;
+  match op, v1, v2 with
+  | Plus, Val(Num x1), Val(Num x2) -> Val(Num (x1 + x2))
+  | Plus, _, _ -> raise (EvalError "can't add non-integers")
+  | Minus, Val(Num x1), Val(Num x2) -> Val(Num (x1 - x2))
+  | Minus, _, _ -> raise (EvalError "can't subtract non-integers")
+  | Times, Val(Num x1), Val(Num x2) -> Val(Num (x1 * x2))
+  | Times, _, _ -> raise (EvalError "can't multiply non-integers")
+  | Equals, Val(Num x1), Val(Num x2) -> Val(Bool (x1 = x2))
+  | Equals, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 = x2))
+  | Equals, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") 
+  | LessThan, Val(Num x1), Val(Num x2) -> Val(Bool (x1 < x2))
+  | LessThan, Val(Bool x1), Val(Bool x2) -> Val(Bool (x1 < x2))
+  | LessThan, _, _ -> raise (EvalError "can't compare non-integers or non-booleans") ;;
 
 let unopeval_env (op : unop) (e : Env.value) : Env.value = 
   match op, e with 
   | Negate, Val(Num x) -> Val(Num (~- x))
   | Negate, _ -> raise (EvalError "can't negate non-integers") ;;
 
-let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.value =
+type semantic_type = 
+  | Dynamic
+  | Lexical
+
+let rec eval_env (exp : expr) (env : Env.env) (semantic_type : semantic_type) : Env.value =
   match exp with
   | Var x -> Env.lookup env x
   | Num i -> Val(Num i)
@@ -232,36 +236,32 @@ let rec eval_env (exp : expr) (env : Env.env) (semantic_type : string) : Env.val
   | Raise -> raise EvalException
   | Unassigned -> raise (EvalError "unassigned")
   | Fun (x, expr) -> 
-    if String.equal semantic_type "dynamic"
-    then Val(Fun(x, expr)) 
-    else 
-      if String.equal semantic_type "lexical" 
-      then Env.close exp env 
-      else raise (EvalError "inputted semantic type is not yet implemented")
+    (match semantic_type with
+    | Dynamic -> Val(Fun(x, expr)) 
+    | Lexical -> Env.close exp env)
   | App (funexpr, expr) -> 
-    if String.equal semantic_type "dynamic"
-    then (match eval_env funexpr env semantic_type with
-        | Env.Val (Fun (varid, fundef)) -> 
-          let vQ = eval_env expr env semantic_type in
-          eval_env fundef (Env.extend env varid (ref vQ)) semantic_type
-        | _ -> raise (EvalError "didn't input a function"))
-    else 
-      if String.equal semantic_type "lexical" 
-      then (match eval_env funexpr env semantic_type with
-        | Env.Closure (Fun (x, lexpr), lexicalenvironment) -> 
-          let vQ = eval_env expr env semantic_type in
-          eval_env lexpr (Env.extend lexicalenvironment x (ref vQ)) semantic_type
-        | _ -> raise (EvalError "didn't input a function")) 
-      else raise (EvalError "inputted semantic type is not yet implemented") ;;
+    match semantic_type with
+    | Dynamic -> 
+      (match eval_env funexpr env semantic_type with
+      | Env.Val (Fun (varid, fundef)) -> 
+        let vQ = eval_env expr env semantic_type in
+        eval_env fundef (Env.extend env varid (ref vQ)) semantic_type
+      | _ -> raise (EvalError "didn't input a function"))
+    | Lexical ->
+      (match eval_env funexpr env semantic_type with
+      | Env.Closure (Fun (x, lexpr), lexicalenvironment) -> 
+        let vQ = eval_env expr env semantic_type in
+        eval_env lexpr (Env.extend lexicalenvironment x (ref vQ)) semantic_type
+      | _ -> raise (EvalError "didn't input a function")) ;;
    
 let eval_d (exp : expr) (env : Env.env) : Env.value =
-  eval_env exp env "dynamic" ;;
+  eval_env exp env Dynamic ;;
        
 (* The LEXICALLY-SCOPED ENVIRONMENT MODEL evaluator -- optionally
    completed as (part of) your extension *)
    
 let eval_l (exp : expr) (env : Env.env) : Env.value =
-  eval_env exp env "lexical" ;;
+  eval_env exp env Lexical ;;
 
 (* The EXTENDED evaluator -- if you want, you can provide your
    extension as a separate evaluator, or if it is type- and
